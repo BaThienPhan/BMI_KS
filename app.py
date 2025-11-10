@@ -9,14 +9,24 @@ st.set_page_config(page_title="Báo Cáo BMI", page_icon="💪", layout="wide")
 
 # --- BIẾN TOÀN CỤC VÀ TÊN FILE ---
 DATA_FILE = "bmi_data.csv"
+# Các cột gốc trong file CSV
 COLUMN_NAMES = [
     "Họ và tên", "Lớp", "Nhóm", "Chiều cao (m)",
     "Cân nặng (kg)", "Chỉ số BMI", "Lời khuyên"
 ]
+# Các cột sẽ hiển thị trong bảng (Thêm cột tính toán)
+DISPLAY_COLUMNS = [
+    "Họ và tên", "Lớp", "Nhóm", "Chiều cao (m)", "Cân nặng (kg)",
+    "Chỉ số BMI", "BMI (Tự động tính)", "Lời khuyên"
+]
+# Các cột sẽ có trong file tải về (Thêm cột tính toán)
+DOWNLOAD_COLUMNS = [
+    "STT", "Họ và tên", "Lớp", "Nhóm", "Chiều cao (m)", "Cân nặng (kg)",
+    "Chỉ số BMI", "BMI (Tự động tính)", "Lời khuyên"
+]
+
 
 # --- HÀM KHỞI TẠO FILE DỮ LIỆU ---
-
-
 def initialize_data_file():
     """
     Kiểm tra và tạo file CSV nếu chưa tồn tại.
@@ -164,6 +174,22 @@ with tab2:
     if not df_all.empty:
         st.success(f"**Tổng số lượt nhập: {len(df_all)}**")
 
+        # --- TÍNH TOÁN CỘT BMI MỚI ĐỂ KIỂM TRA ---
+        try:
+            # Chuyển đổi kiểu dữ liệu để tính toán, phòng lỗi
+            can_nang_kg = pd.to_numeric(df_all["Cân nặng (kg)"])
+            # Thay thế 0 bằng NaN để tránh lỗi chia cho 0
+            chieu_cao_m = pd.to_numeric(
+                df_all["Chiều cao (m)"]).replace(0, np.nan)
+
+            df_all["BMI (Tự động tính)"] = (
+                can_nang_kg / (chieu_cao_m ** 2)).round(2)
+        except Exception as e:
+            st.warning(f"Không thể tính toán BMI tự động. Lỗi: {e}")
+            df_all["BMI (Tự động tính)"] = "Lỗi"
+
+        # ---------------------------------------------
+
         all_groups = ["Nhóm 1", "Nhóm 2", "Nhóm 3", "Nhóm 4", "Nhóm 5"]
 
         # Tạo các tab cho từng nhóm
@@ -179,8 +205,8 @@ with tab2:
                 if group_df.empty:
                     st.info(f"Hiện chưa có dữ liệu nào cho {group_name}.")
                 else:
-                    # Dùng .copy() để tránh lỗi Warning
-                    df_display = group_df[COLUMN_NAMES].copy()
+                    # Dùng .copy() và chỉ chọn các cột cần hiển thị
+                    df_display = group_df[DISPLAY_COLUMNS].copy()
 
                     df_display.index = np.arange(1, len(df_display) + 1)
                     df_display = df_display.rename_axis('STT').reset_index()
@@ -192,12 +218,22 @@ with tab2:
         st.subheader("Tải xuống toàn bộ dữ liệu")
 
         # Chuẩn bị dữ liệu để tải xuống
-        df_all_with_stt = df_all[COLUMN_NAMES].copy()
+        df_all_with_stt = df_all.copy()
+
+        # Đảm bảo cột STT được thêm vào đúng
         df_all_with_stt.index = np.arange(1, len(df_all_with_stt) + 1)
         df_all_with_stt = df_all_with_stt.rename_axis('STT').reset_index()
 
-        # Chuyển DataFrame thành chuỗi CSV (định dạng UTF-8 để hỗ trợ tiếng Việt)
-        csv_data = df_all_with_stt.to_csv(index=False).encode('utf-8')
+        # Sắp xếp lại các cột cho file tải về
+        # Đảm bảo 'BMI (Tự động tính)' có trong df_all_with_stt trước khi chọn
+        if "BMI (Tự động tính)" not in df_all_with_stt.columns:
+            # Thêm cột nếu bị thiếu
+            df_all_with_stt["BMI (Tự động tính)"] = "Lỗi"
+
+        df_all_with_stt = df_all_with_stt[DOWNLOAD_COLUMNS]
+
+        # Chuyển DataFrame thành chuỗi CSV (định dạng UTF-8-sig để hỗ trợ tiếng Việt)
+        csv_data = df_all_with_stt.to_csv(index=False).encode('utf-8-sig')
 
         st.download_button(
             label="Tải xuống toàn bộ báo cáo (.csv)",
