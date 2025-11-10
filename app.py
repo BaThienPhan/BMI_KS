@@ -12,17 +12,17 @@ DATA_FILE = "bmi_data.csv"
 # Các cột gốc trong file CSV
 COLUMN_NAMES = [
     "Họ và tên", "Lớp", "Nhóm", "Chiều cao (m)",
-    "Cân nặng (kg)", "Chỉ số BMI", "Lời khuyên"
+    "Cân nặng (kg)", "Chỉ số BMI", "Kết luận", "Lời khuyên"
 ]
 # Các cột sẽ hiển thị trong bảng (Thêm cột tính toán)
 DISPLAY_COLUMNS = [
     "Họ và tên", "Lớp", "Nhóm", "Chiều cao (m)", "Cân nặng (kg)",
-    "Chỉ số BMI", "BMI (Tự động tính)", "Lời khuyên"
+    "Chỉ số BMI", "BMI (Tự động tính)", "Kết luận", "Lời khuyên"
 ]
 # Các cột sẽ có trong file tải về (Thêm cột tính toán)
 DOWNLOAD_COLUMNS = [
     "STT", "Họ và tên", "Lớp", "Nhóm", "Chiều cao (m)", "Cân nặng (kg)",
-    "Chỉ số BMI", "BMI (Tự động tính)", "Lời khuyên"
+    "Chỉ số BMI", "BMI (Tự động tính)", "Kết luận", "Lời khuyên"
 ]
 
 
@@ -72,7 +72,8 @@ with tab1:
             # Hàng 2: Chọn Nhóm
             ten_nhom = st.selectbox(
                 "Chọn nhóm",
-                ["Nhóm 1", "Nhóm 2", "Nhóm 3", "Nhóm 4", "Nhóm 5"],
+                ["Nhóm 1", "Nhóm 2", "Nhóm 3", "Nhóm 4",
+                    "Nhóm 5", "Nhóm 6 (Giáo viên)"],
                 index=None,
                 placeholder="Vui lòng chọn nhóm..."
             )
@@ -90,14 +91,28 @@ with tab1:
             chi_so_bmi = st.number_input(
                 "Nhập Chỉ số BMI", min_value=0.0, max_value=50.0, step=0.1, format="%.2f")
 
-            # Hàng 5: Ô nhập lời khuyên
-            loi_khuyen = st.text_area("Nhập lời khuyên")
+            # Hàng 5: Ô chọn Kết luận (Dựa trên thang đo 12 tuổi)
+            ket_luan = st.selectbox(
+                "Chọn Kết luận (cho HS 12 tuổi)",
+                [
+                    "BMI < 15: Gầy",
+                    "15 <= BMI < 22: Bình thường",
+                    "22 <= BMI < 25: Có nguy cơ béo phì",
+                    "BMI >= 25: Béo phì"
+                ],
+                index=None,
+                placeholder="Vui lòng chọn kết luận..."
+            )
+
+            # Hàng 6: Ô nhập lời khuyên
+            loi_khuyen = st.text_area("Nhập lời khuyên (nếu có)")
 
             submit_button = st.form_submit_button(label="Thêm vào danh sách")
 
         # --- Xử lý dữ liệu sau khi nhấn nút ---
         if submit_button:
-            if ho_va_ten and lop and ten_nhom and chieu_cao > 0 and can_nang > 0:
+            # Cập nhật kiểm tra: thêm 'ket_luan'
+            if ho_va_ten and lop and ten_nhom and chieu_cao > 0 and can_nang > 0 and ket_luan:
 
                 new_data = {
                     "Họ và tên": ho_va_ten,
@@ -106,6 +121,7 @@ with tab1:
                     "Chiều cao (m)": chieu_cao,
                     "Cân nặng (kg)": can_nang,
                     "Chỉ số BMI": chi_so_bmi,
+                    "Kết luận": ket_luan,  # Thêm dữ liệu kết luận
                     "Lời khuyên": loi_khuyen
                 }
 
@@ -127,7 +143,7 @@ with tab1:
                     st.error(f"Lỗi khi đang lưu file: {e}")
             else:
                 st.error(
-                    "Vui lòng nhập đầy đủ Họ tên, Lớp, Nhóm, Chiều cao và Cân nặng.")
+                    "Vui lòng nhập đầy đủ Họ tên, Lớp, Nhóm, Chiều cao, Cân nặng và chọn Kết luận.")
 
     # --- Khu vực Admin (giống file khaosat.py) ---
     st.divider()
@@ -190,7 +206,9 @@ with tab2:
 
         # ---------------------------------------------
 
-        all_groups = ["Nhóm 1", "Nhóm 2", "Nhóm 3", "Nhóm 4", "Nhóm 5"]
+        # Cập nhật danh sách nhóm
+        all_groups = ["Nhóm 1", "Nhóm 2", "Nhóm 3",
+                      "Nhóm 4", "Nhóm 5", "Nhóm 6 (Giáo viên)"]
 
         # Tạo các tab cho từng nhóm
         group_tabs = st.tabs(all_groups)
@@ -200,12 +218,22 @@ with tab2:
                 group_name = all_groups[i]
                 st.subheader(f"Dữ liệu cho {group_name}")
 
+                # Kiểm tra xem 'Nhóm' có trong df_all không
+                if "Nhóm" not in df_all.columns:
+                    st.error("Lỗi: Không tìm thấy cột 'Nhóm' trong file dữ liệu.")
+                    st.stop()
+
                 group_df = df_all[df_all["Nhóm"] == group_name]
 
                 if group_df.empty:
                     st.info(f"Hiện chưa có dữ liệu nào cho {group_name}.")
                 else:
                     # Dùng .copy() và chỉ chọn các cột cần hiển thị
+                    # Đảm bảo các cột mới tồn tại trước khi chọn
+                    for col in DISPLAY_COLUMNS:
+                        if col not in group_df.columns:
+                            group_df[col] = np.nan  # Thêm cột nếu thiếu
+
                     df_display = group_df[DISPLAY_COLUMNS].copy()
 
                     df_display.index = np.arange(1, len(df_display) + 1)
@@ -225,10 +253,10 @@ with tab2:
         df_all_with_stt = df_all_with_stt.rename_axis('STT').reset_index()
 
         # Sắp xếp lại các cột cho file tải về
-        # Đảm bảo 'BMI (Tự động tính)' có trong df_all_with_stt trước khi chọn
-        if "BMI (Tự động tính)" not in df_all_with_stt.columns:
-            # Thêm cột nếu bị thiếu
-            df_all_with_stt["BMI (Tự động tính)"] = "Lỗi"
+        # Đảm bảo các cột mới có trong df_all_with_stt trước khi chọn
+        for col in DOWNLOAD_COLUMNS:
+            if col not in df_all_with_stt.columns:
+                df_all_with_stt[col] = np.nan  # Thêm cột nếu bị thiếu
 
         df_all_with_stt = df_all_with_stt[DOWNLOAD_COLUMNS]
 
